@@ -21,21 +21,16 @@ contract ArisanContract is ReentrancyGuard{
     struct Arisan{
         uint256 id;
         address creator;
-        uint participantCount;
+        uint32 participantCount;
         bytes32 name;
         uint256 monthlyDeposit;
         uint256 monthlyEarning;
         uint256 currentDeposited;
-        address token;
         uint256 depositStartTime;
         address[] participants;
         mapping(address => bool) isParticipant;
-        mapping(address => bool) hasDeposit;
         mapping(address => bool) hasWon;
-        mapping(address => uint256) participantCollateral; 
         uint256 collateralAmount;
-        uint256 round;
-        uint256 currentRoundWinCount;
         ArisanStatus status;
     }
 
@@ -47,7 +42,7 @@ contract ArisanContract is ReentrancyGuard{
 
     // Events
     event ParticipantJoined(address participant);
-    event DepositReceived(address participant, uint256 amount);
+    event DepositReceived(address participant);
     event WinnerSelected(address winner, uint256 amount);
     event ArisanCreated(address creator, uint256 id, uint256 monthlyDeposit, uint participantCount);
 
@@ -55,25 +50,21 @@ contract ArisanContract is ReentrancyGuard{
         arisanCount = 0;
     }
 
-    function createArisan(address _token, uint256 _participantCount, bytes32 _name, uint256 _monthlyDeposit, uint256 _monthlyEarning, uint256 _collateralAmount) external payable{
+    function createArisan(address _token, uint32 _participantCount, bytes32 _name, uint256 _monthlyDeposit, uint256 _monthlyEarning, uint256 _collateralAmount) external payable{
         require(ArisanPool[arisanCount].creator == address(0), "Id used.");
 
         Arisan storage newArisan = ArisanPool[arisanCount];
 
         newArisan.id = arisanCount;
         newArisan.creator = msg.sender;
-        newArisan.participantCount = _participantCount;
         newArisan.name = _name;
         newArisan.monthlyDeposit = _monthlyDeposit;
         newArisan.monthlyEarning = _monthlyEarning;
         newArisan.currentDeposited = 0;
-        newArisan.round = 0;
-        newArisan.currentRoundWinCount = 0;
-        newArisan.status = ArisanStatus.Pending;
 
+        newArisan.status = ArisanStatus.Pending;
+        newArisan.participantCount = _participantCount;
         newArisan.participants.push(msg.sender);
-        newArisan.isParticipant[msg.sender] = true;
-        newArisan.hasDeposit[msg.sender] = false;
         newArisan.hasWon[msg.sender] = false;
         
         if(_token == address(0)) {
@@ -82,12 +73,11 @@ contract ArisanContract is ReentrancyGuard{
             IERC20(_token).transferFrom(msg.sender, address(this), _collateralAmount);
         }
 
-        newArisan.participantCollateral[msg.sender] = _collateralAmount;
-
+        newArisan.isParticipant[msg.sender] = true;
         arisanCount += 1;
 
         //Emit event
-        emit ArisanCreated(msg.sender, arisanCount, _monthlyDeposit, _participantCount);
+        emit ArisanCreated(msg.sender, newArisan.id, _monthlyDeposit, _participantCount);
     }
 
     function joinArisan(uint256 _arisanId, address _token, uint256 _collateralAmount) external payable{
@@ -95,30 +85,28 @@ contract ArisanContract is ReentrancyGuard{
         Arisan storage arisan = ArisanPool[_arisanId];
 
         require(arisan.status == ArisanStatus.Pending, "You can't join");
-        require(!arisan.isParticipant[msg.sender], "Already a participant.");
         require(arisan.participants.length < arisan.participantCount, "Arisan is full.");
-
-        arisan.participants.push(msg.sender);
-        arisan.isParticipant[msg.sender] = true;
-        arisan.hasDeposit[msg.sender] = false;
-        arisan.hasWon[msg.sender] = false;
+        require(!arisan.isParticipant[msg.sender], "Already a participant.");
 
         if(_token == address(0)) {
             require(msg.value >= _collateralAmount, "Insufficient ether.");
         } else {
             IERC20(_token).transferFrom(msg.sender, address(this), _collateralAmount);
         }
-        arisan.participantCollateral[msg.sender] = _collateralAmount;
+
+        arisan.isParticipant[msg.sender] = true;
+       
+        arisan.participants.push(msg.sender);
+        arisan.hasWon[msg.sender] = false;
+        if(arisan.participants.length == arisan.participantCount) {
+            startArisan(_arisanId);
+        }
+        emit ParticipantJoined(msg.sender);
     }
 
     function leaveArisan(uint256 _arisanId) internal {
         require(_arisanId <= arisanCount, "Arisan does not exist.");
         Arisan storage arisan = ArisanPool[_arisanId];
-
-        if(arisan.hasDeposit[msg.sender] == false) {
-            arisan.currentDeposited += arisan.participantCollateral[msg.sender];
-            arisan.participantCollateral[msg.sender] = 0;
-        }
 
          // Remove participant from the Arisan
         arisan.isParticipant[msg.sender] = false;
@@ -135,33 +123,45 @@ contract ArisanContract is ReentrancyGuard{
 
     function startArisan(uint256 _arisanId) internal{
         require(_arisanId <= arisanCount, "Arisan does not exist.");
-        require(ArisanPool[_arisanId].participants.length == ArisanPool[_arisanId].participantCount, "Participant is not enough.");
 
-        ArisanPool[_arisanId].status = ArisanStatus.Started;
-        ArisanPool[_arisanId].depositStartTime = block.timestamp;
+        Arisan storage arisan = ArisanPool[_arisanId];
+        require(arisan.participants.length == arisan.participantCount, "Participant is not enough.");
+
+        arisan.status = ArisanStatus.Started;
+        arisan.depositStartTime = block.timestamp;
 
     }
 
-    function depositArisan(uint256 _arisanId, address _token, uint256 _tokenAmount) external payable nonReentrant {
+    function depositArisan(uint256 _arisanId, address _token) external payable nonReentrant {
         require(_arisanId <= arisanCount, "Arisan does not exist.");
         Arisan storage arisan = ArisanPool[_arisanId];
         require(arisan.status == ArisanStatus.Started, "Arisan is not started");
         require(arisan.isParticipant[msg.sender], "You are not a participant");
-        require(arisan.hasDeposit[msg.sender] != true, "You have already deposited");
         require(arisan.status == ArisanStatus.Started, "Arisan is not active.");
         require(arisan.currentDeposited < arisan.monthlyEarning, "Target amount already reached.");
-        require(arisan.round > 0, "The round is over");
 
-
+        uint256 depositAmount;
         if(_token == address(0)) {
-            require(msg.value >= _tokenAmount, "Insufficient ether.");
+            // Deposit is in ETH
+            depositAmount = msg.value;
+            require(depositAmount == arisan.monthlyDeposit, "Incorrect deposit amount.");
+            arisan.currentDeposited += depositAmount;
         } else {
-            IERC20(_token).transferFrom(msg.sender, address(this), _tokenAmount);
+            // Deposit is in ERC20 token
+            depositAmount = arisan.monthlyDeposit;
+            require(msg.value == 0, "ETH not accepted for this Arisan.");
+            
+            // Check allowance
+            uint256 allowance = IERC20(_token).allowance(msg.sender, address(this));
+            require(allowance >= depositAmount, "Insufficient token allowance.");
+
+            // Transfer tokens from participant to contract
+            bool success = IERC20(_token).transferFrom(msg.sender, address(this), depositAmount);
+            require(success, "Token transfer failed.");
+            
+            arisan.currentDeposited += depositAmount;
         }
 
-        arisan.hasDeposit[msg.sender] = true;
-
-        arisan.currentDeposited += msg.value;
 
         // Check if target amount is reached
         if (arisan.currentDeposited >= arisan.monthlyEarning) {
@@ -169,7 +169,7 @@ contract ArisanContract is ReentrancyGuard{
             selectWinner(_arisanId);
         }
 
-        //emit DepositMade(_arisanId, msg.sender, amountToDeposit, isEth);
+        emit DepositReceived(msg.sender);
     }
 
     function selectWinner(uint256 _arisanId) internal {
@@ -184,13 +184,9 @@ contract ArisanContract is ReentrancyGuard{
 
         address winner = eligibleParticipants[randomIndex];
 
-        arisan.currentRoundWinCount += 1;
-
-        distributeFunds(_arisanId, winner);
+        distributeFunds(_arisanId, winner, address(0));
 
         arisan.hasWon[winner] = true;
-
-        resetForNextDeposit(_arisanId);
 
         //emit WinnerSelected(_arisanId, winner, arisan.currentDeposited);
     }
@@ -222,42 +218,69 @@ contract ArisanContract is ReentrancyGuard{
         return eligibleParticipants;
     }
 
-    function distributeFunds(uint256 _arisanId, address winner) internal nonReentrant {
+    function distributeFunds(uint256 _arisanId, address winner, address _token) internal nonReentrant {
         Arisan storage arisan = ArisanPool[_arisanId];
 
         uint256 amountToSend = arisan.currentDeposited;
 
-        if(arisan.token == address(0)) {
+        if(_token == address(0)) {
             (bool sent, ) = winner.call{value: amountToSend}("");
             require(sent, "Failed to send Ether.");
         } else {
-            IERC20(arisan.token).transfer(winner, amountToSend);
+            IERC20(_token).transfer(winner, amountToSend);
         }
 
         // Reset currentDeposited
         arisan.currentDeposited = 0;
     }
 
-    function resetForNextDeposit(uint256 _arisanId) internal {
+    //Some getter function
+    function isParticipant(uint256 _arisanId, address _participant) public view returns (bool) {
         Arisan storage arisan = ArisanPool[_arisanId];
+        return arisan.isParticipant[_participant];
+    }
 
-        // Reset hasDeposited mapping
-        for (uint256 i = 0; i < arisan.participants.length; i++) {
-            arisan.hasDeposit[arisan.participants[i]] = false;
-        }
+    function getCurrentDeposited(uint256 _arisanId) public view returns(uint256) {
+        Arisan storage arisan = ArisanPool[_arisanId];
+        return arisan.currentDeposited;
+    }
 
-        if (arisan.currentRoundWinCount == arisan.participants.length) {
-            // Go to next round if there is more round
-            if(arisan.round > 0) {
-                for (uint256 i = 0; i < arisan.participants.length; i++) {
-                    arisan.hasWon[arisan.participants[i]] = false;
-                }
-                arisan.currentRoundWinCount = 0;
-                arisan.round -= 1;
-            } else {
-                arisan.status = ArisanStatus.Ended;
-            }
-        }
+    function hasWon(uint256 _arisanId, address _participant) public view returns (bool) {
+        Arisan storage arisan = ArisanPool[_arisanId];
+        return arisan.hasWon[_participant];
+    }
+
+    function getParticipants(uint256 _arisanId) public view returns (address[] memory) {
+        return ArisanPool[_arisanId].participants;
+    }
+
+    function getArisan(uint256 _arisanId) public view returns (
+        uint256 id,
+        address creator,
+        uint32 participantCount,
+        bytes32 name,
+        uint256 monthlyDeposit,
+        uint256 monthlyEarning,
+        uint256 currentDeposited,
+        uint256 depositStartTime,
+        uint256 collateralAmount,
+        ArisanStatus status,
+        uint256 currentParticipantsCount
+    ) {
+        Arisan storage arisan = ArisanPool[_arisanId];
+        return (
+            arisan.id,
+            arisan.creator,
+            arisan.participantCount,
+            arisan.name,
+            arisan.monthlyDeposit,
+            arisan.monthlyEarning,
+            arisan.currentDeposited,
+            arisan.depositStartTime,
+            arisan.collateralAmount,
+            arisan.status,
+            arisan.participants.length
+        );
     }
 
 }
