@@ -1,6 +1,12 @@
-# Sample Hardhat Project
+# Arisan Project
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+This is the smart contract for arisan project
+
+## Features
+- Pool creation
+- Token swap
+- Random Number Generation (RNG) with pyth network.
+- 0mnichain communication
 
 Try running some of the following tasks:
 
