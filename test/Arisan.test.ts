@@ -57,7 +57,6 @@ describe("Arisan", function() {
             .withArgs(await owner.getAddress(), 0, monthlyDeposit, participantCount);
 
           const arisan = await arisanContract.getArisan(0);
-          console.log(arisan.currentParticipantsCount)
           expect(arisan.currentParticipantsCount).to.equal(1);
     })
 
@@ -87,7 +86,6 @@ describe("Arisan", function() {
             .withArgs(await owner.getAddress(), 1, monthlyDeposit, participantCount);
         
         const arisan = await arisanContract.getArisan(0);
-        console.log(arisan.currentParticipantsCount)
         expect(arisan.currentParticipantsCount).to.equal(1);
         
     })
@@ -133,7 +131,6 @@ describe("Arisan", function() {
             .to.be.revertedWith("You can't join")
 
         const arisan = await arisanContract.getArisan(0);
-        console.log(arisan.currentParticipantsCount);
         expect(arisan.currentParticipantsCount).to.equal(3);
         expect(arisan.status).to.equal(1);
         await expect(

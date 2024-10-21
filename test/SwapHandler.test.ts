@@ -24,11 +24,11 @@ describe("Swap", function() {
         const ERC_ABI = ABI;
 
         //WETH contract
-        const WETH_addr = '0xC02aaA39b223FE8D0a0e5C4F27eAD9083C756Cc2'
+        const WETH_addr = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
         WETH_Contract = new hre.ethers.Contract(WETH_addr, ERC_ABI, addr1);
 
         //USDT contract
-        const USDT_addr = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        const USDT_addr = "0x549Ebba8036Ab746611B4fFA1423eb0A4Df61440"
         USDT_Contract = new hre.ethers.Contract(USDT_addr, ERC_ABI, addr1);
 
         // initial balance in ETH 
@@ -75,7 +75,7 @@ describe("Swap", function() {
 
             //Check USDT balance
             const num_weth_after = hre.ethers.formatEther((await WETH_Contract.balanceOf(await addr1.getAddress())));
-            const num_usdt = (await USDT_Contract.balanceOf(await addr1.getAddress()));
+            const num_usdt = hre.ethers.formatUnits((await USDT_Contract.balanceOf(await addr1.getAddress())), 6);
             expect(num_weth_after).to.equal('1.0');
 
             console.log("ETH Balance: ", balance);

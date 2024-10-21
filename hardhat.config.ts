@@ -1,5 +1,4 @@
 import * as dotenv from "dotenv";
-
 import { HardhatUserConfig } from "hardhat/config";
 import { HttpNetworkAccountsUserConfig } from "hardhat/types";
 import "@nomicfoundation/hardhat-toolbox";
@@ -22,7 +21,7 @@ if (accounts == null) {
     )
 }
 
-const alchemyApiKey: string | undefined = process.env.ALCHEMY_API;
+const alchemyApiKey: string | undefined = process.env.ALCHEMY_MAINNET_API;
 if (!alchemyApiKey) {
   throw new Error("Please set your ALCHEMY_API in a .env file");
 }
@@ -35,13 +34,23 @@ const config: HardhatUserConfig = {
     hardhat:{
       forking:{
         url: alchemyApiKey,
-        blockNumber: 14638929
-      }
+        blockNumber: 20998408
+      },
     },
     'sepolia': {
       url: process.env.RPC_URL_SEPOLIA || 'https://rpc.sepolia.org/',
       accounts,
     },
+    "arbitrum-sepolia": {
+      url: process.env.ALCHEMY_ARBITRUM_SEPOLIA_API,
+      accounts,
+    }
+  },
+  sourcify: {
+    enabled: true
+  },
+  etherscan:{
+    apiKey:process.env.ETHERSCAN_API
   }
 };
 
